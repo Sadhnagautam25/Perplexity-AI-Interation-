@@ -111,36 +111,39 @@ export async function userMessage(req, res, next) {
         /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/,
       )?.[0];
 
-      if (emailTo) {
+      if (!emailTo) {
+        aiReply = "Please provide a valid email address 📧";
+      } else {
         const response = await model.invoke([
           {
             role: "system",
             content:
-              "Draft a professional email based on user intent. Format exactly like this -> Subject: <text> HTML Body: <html>",
+              "Draft a professional email. Respond ONLY in this format:\n\nSubject: <subject>\nHTML Body: <html>",
           },
           ...formattedMessages,
         ]);
 
         const subject =
-          response.content.match(/Subject:\s*(.*)/i)?.[1] || "Notification";
+          response.content.match(/Subject:\s*(.*)/i)?.[1]?.trim() ||
+          "Notification";
+
         const htmlContent =
-          response.content.match(/HTML Body:\s*([\s\S]*)/i)?.[1] ||
+          response.content.match(/HTML Body:\s*([\s\S]*)/i)?.[1]?.trim() ||
           response.content;
 
         const isSent = await sendEmail({
           to: emailTo,
-          subject: subject,
+          subject,
           html: htmlContent,
         });
+
+        console.log("EMAIL SENT STATUS:", isSent);
+
         aiReply = isSent
           ? `✅ Email sent to ${emailTo}`
-          : "❌ Email failed to send.";
-      } else {
-        aiReply =
-          "Please provide a valid email address so I can send the email! 📧";
+          : "❌ Email failed to send. Check server logs.";
       }
     }
-
     // --- BRANCH B: PDF / SUMMARY ---
     else if (file || isSummaryRequest) {
       if (file && file.mimetype === "application/pdf") {
