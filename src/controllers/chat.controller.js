@@ -46,7 +46,7 @@ export async function userMessage(req, res, next) {
       });
     }
 
-    // 3. 🧠 SMART HISTORY (Limit 6 for better memory)
+    // 3. 🧠 SMART HISTORY (Limit 6)
     const rawHistory = await messageModel
       .find({ chatId: currentChatId })
       .sort({ createdAt: -1 })
@@ -66,7 +66,7 @@ export async function userMessage(req, res, next) {
       {
         role: "system",
         content:
-          "You are a helpful AI. If the user asks for news, provide text only. Do not attempt to generate images unless specifically asked for a NEW drawing/photo.",
+          "You are a helpful AI. If the user asks for news, provide text only. For emails, generate a professional Subject and HTML Body.",
       },
       ...filteredHistory.map((msg) => ({
         role: msg.role === "ai" ? "assistant" : "user",
@@ -74,25 +74,28 @@ export async function userMessage(req, res, next) {
       })),
     ];
 
-    // 4. INTENT DETECTION (Adding your logic here)
+    // 4. INTENT DETECTION
     const currentInput = message?.toLowerCase() || "";
 
-    // ✅ APKA SUMMARY LOGIC
+    // Strict Image Detection: Sirf tabhi jab user 'create' ya 'generate' bole
+    const isImageRequest =
+      /\b(generate|create|draw|make|imagine)\b.*\b(image|photo|picture|art|drawing)\b/i.test(
+        currentInput,
+      );
+
+    const isEmailRequest =
+      (currentInput.includes("email") &&
+        (currentInput.includes("send") || currentInput.includes("draft"))) ||
+      /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/.test(currentInput);
+
     const isSummaryRequest =
-      /\b(summarize|summary|explain|points|shorten|main idea|content)\b/i.test(
+      /\b(summarize|summary|explain|points|shorten|main idea)\b/i.test(
         currentInput,
       ) &&
       (currentInput.includes("pdf") ||
         currentInput.includes("document") ||
         currentInput.includes("this"));
 
-    const isImageRequest =
-      /\b(generate|create|draw|make|imagine|image|photo|picture)\b/i.test(
-        currentInput,
-      );
-    const isEmailRequest =
-      currentInput.includes("email") &&
-      (currentInput.includes("send") || currentInput.includes("draft"));
     const isWebQuery =
       /\b(latest|news|today|weather|price|current status)\b/i.test(
         currentInput,
@@ -100,19 +103,75 @@ export async function userMessage(req, res, next) {
 
     let aiReply = "";
 
-    // 5. EXECUTION BRANCHES
+    // 5. EXECUTION BRANCHES (Updated Priority)
 
-    // --- BRANCH: IMAGE ---
-    if (isImageRequest) {
+    // --- BRANCH A: EMAIL (Highest Priority if Email exists) ---
+    if (isEmailRequest) {
+      const emailTo = currentInput.match(
+        /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/,
+      )?.[0];
+
+      if (emailTo) {
+        const response = await model.invoke([
+          {
+            role: "system",
+            content:
+              "Draft a professional email based on user intent. Format exactly like this -> Subject: <text> HTML Body: <html>",
+          },
+          ...formattedMessages,
+        ]);
+
+        const subject =
+          response.content.match(/Subject:\s*(.*)/i)?.[1] || "Notification";
+        const htmlContent =
+          response.content.match(/HTML Body:\s*([\s\S]*)/i)?.[1] ||
+          response.content;
+
+        const isSent = await sendEmail({
+          to: emailTo,
+          subject: subject,
+          html: htmlContent,
+        });
+        aiReply = isSent
+          ? `✅ Email sent to ${emailTo}`
+          : "❌ Email failed to send.";
+      } else {
+        aiReply =
+          "Please provide a valid email address so I can send the email! 📧";
+      }
+    }
+
+    // --- BRANCH B: PDF / SUMMARY ---
+    else if (file || isSummaryRequest) {
+      if (file && file.mimetype === "application/pdf") {
+        const rawPdfText = await pdfToolService(file.buffer);
+        const summaryResponse = await model.invoke([
+          { role: "system", content: "Summarize the text in 5 clear points." },
+          { role: "user", content: `Text: ${rawPdfText.slice(0, 3000)}` },
+        ]);
+        aiReply = `📄 **PDF Summary:**\n\n${summaryResponse.content}`;
+      } else if (isSummaryRequest && !file) {
+        aiReply = "Please upload a PDF first so I can summarize it for you! 😊";
+      } else if (file) {
+        const uploadedFile = await uploadFile({
+          buffer: file.buffer,
+          fileName: file.originalname,
+        });
+        aiReply = uploadedFile.url;
+      }
+    }
+
+    // --- BRANCH C: IMAGE (Lower priority than specific tasks) ---
+    else if (isImageRequest) {
       let imagePrompt = currentInput
         .replace(
-          /\b(generate|create|draw|make|imagine|image|photo|picture|a|an|the|of|show|me)\b/gi,
+          /\b(generate|create|draw|make|imagine|image|photo|picture|a|an|the|of|show|me|send)\b/gi,
           "",
         )
         .trim();
+
       if (!imagePrompt || imagePrompt.length < 3) {
-        aiReply =
-          "🎨 I'd love to create an image for you! Please provide a description.";
+        aiReply = "🎨 I'd love to create an image! What should I draw?";
       } else {
         try {
           aiReply = await generateImage(imagePrompt);
@@ -122,62 +181,7 @@ export async function userMessage(req, res, next) {
       }
     }
 
-    // --- BRANCH: PDF / SUMMARY (Handling your Intent) ---
-    else if (file || isSummaryRequest) {
-      if (file && file.mimetype === "application/pdf") {
-        const uploadedFile = await uploadFile({
-          buffer: file.buffer,
-          fileName: file.originalname,
-        });
-        const rawPdfText = await pdfToolService(file.buffer);
-
-        // AI call for Summary
-        const summaryResponse = await model.invoke([
-          { role: "system", content: "Summarize the text in 5 clear points." },
-          { role: "user", content: `Text: ${rawPdfText.slice(0, 3000)}` },
-        ]);
-        aiReply = `📄 **PDF Summary:**\n\n${summaryResponse.content}`;
-      } else if (isSummaryRequest && !file) {
-        aiReply = "Please upload a PDF first so I can summarize it for you! 😊";
-      } else if (file) {
-        // Handle non-pdf files (Images etc)
-        const uploadedFile = await uploadFile({
-          buffer: file.buffer,
-          fileName: file.originalname,
-        });
-        aiReply = uploadedFile.url;
-      }
-    }
-
-    // --- BRANCH: EMAIL ---
-    else if (isEmailRequest) {
-      const response = await model.invoke([
-        {
-          role: "system",
-          content:
-            "Draft a professional email. Format: Subject: <text> HTML Body: <html>",
-        },
-        ...formattedMessages,
-      ]);
-      const emailTo = currentInput.match(
-        /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/,
-      )?.[0];
-
-      if (emailTo) {
-        const isSent = await sendEmail({
-          to: emailTo,
-          subject: response.content.match(/Subject:\s*(.*)/i)?.[1] || "Update",
-          html:
-            response.content.match(/HTML Body:\s*([\s\S]*)/i)?.[1] ||
-            response.content,
-        });
-        aiReply = isSent ? `✅ Email sent to ${emailTo}` : "❌ Email failed.";
-      } else {
-        aiReply = "Please provide a valid email address to send the email.";
-      }
-    }
-
-    // --- BRANCH: WEB SEARCH ---
+    // --- BRANCH D: WEB SEARCH ---
     else if (isWebQuery) {
       try {
         const search = await tvly.search(message);
@@ -196,7 +200,7 @@ export async function userMessage(req, res, next) {
       }
     }
 
-    // --- BRANCH: NORMAL CHAT ---
+    // --- BRANCH E: NORMAL CHAT ---
     else {
       const response = await agent.invoke({ messages: formattedMessages });
       aiReply = response.messages.at(-1)?.content || "I'm here to help!";
