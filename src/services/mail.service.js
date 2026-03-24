@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 
 dotenv.config();
-import { emailApi } from "./brevo";
+import { emailApi } from "../services/brevo.js";
 
 export async function sendEmail({ to, subject, html }) {
   try {
