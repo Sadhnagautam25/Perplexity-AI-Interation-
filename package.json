@@ -18,6 +18,7 @@
     "@langchain/core": "^1.1.32",
     "@langchain/groq": "^1.1.5",
     "@langchain/textsplitters": "^1.0.1",
+    "@sendinblue/client": "^3.3.1",
     "@tavily/core": "^0.7.2",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",

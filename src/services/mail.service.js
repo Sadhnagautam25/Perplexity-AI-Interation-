@@ -1,30 +1,34 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { Resend } from "resend";
+import SibApiV3Sdk from "@sendinblue/client";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const client = new SibApiV3Sdk.TransactionalEmailsApi();
 
-export async function sendEmail({ to, subject, html, text }) {
+client.setApiKey(
+  SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY,
+);
+
+export async function sendEmail({ to, subject, html }) {
   try {
-    console.log("👉 Resend email called for:", to);
-
-    const { data, error } = await resend.emails.send({
-      from: "onboarding@resend.dev", // default testing domain
-      to: [to],
+    const emailData = {
+      sender: {
+        email: process.env.SENDER_EMAIL,
+      },
+      to: [
+        {
+          email: to,
+        },
+      ],
       subject: subject,
-      html: html,
-      text: text,
-    });
+      htmlContent: html,
+    };
 
-    if (error) {
-      console.log("❌ Resend error:", error);
-      return false;
-    }
-
-    console.log("✅ Email sent via Resend:", data);
+    const response = await client.sendTransacEmail(emailData);
+    console.log("✅ Email sent:", response);
     return true;
   } catch (error) {
-    console.log("❌ FULL EMAIL ERROR:", error);
+    console.log("❌ Brevo error:", error);
     return false;
   }
 }
