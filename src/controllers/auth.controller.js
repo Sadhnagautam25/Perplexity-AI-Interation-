@@ -9,6 +9,7 @@ import { redis } from "../config/cache.js";
 
 export async function registerController(req, res, next) {
   try {
+    console.log("👉 Register controller hit");
     const { username, email, password, bio } = req.body;
 
     // check user already exists
@@ -42,6 +43,8 @@ export async function registerController(req, res, next) {
       profile: userprofile || undefined,
     });
 
+    console.log("👉 User created:", user.email);
+
     // create verification token
     const verificationToken = jwt.sign(
       { email: user.email },
@@ -49,11 +52,17 @@ export async function registerController(req, res, next) {
       { expiresIn: "10m" },
     );
 
+    console.log("👉 Verification token generated");
+
     // dynamic base url (ngrok / localhost)
     const verifyURL = `${process.env.BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
 
+    console.log("👉 Verify URL:", verifyURL);
+
+    console.log("👉 Sending email to:", email);
+
     // send email
-    await sendEmail({
+    const result = await sendEmail({
       to: email,
       subject: "Verify your email - Perplexity 🤖",
       html: `
@@ -111,6 +120,8 @@ export async function registerController(req, res, next) {
 </html>
       `,
     });
+
+    console.log("👉 Email send result:", result);
 
     res.status(201).json({
       success: true,

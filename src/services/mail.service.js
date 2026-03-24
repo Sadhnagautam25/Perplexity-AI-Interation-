@@ -21,9 +21,9 @@ transpoter.verify((error, success) => {
   }
 });
 
-
 export async function sendEmail({ to, subject, html, text }) {
   try {
+    console.log("👉 sendEmail called for:", to);
     const mailOption = {
       from: process.env.GOOGLE_USER,
       to,
@@ -34,10 +34,10 @@ export async function sendEmail({ to, subject, html, text }) {
 
     const details = await transpoter.sendMail(mailOption);
     console.log("✅ Email sent:", details.response);
-
+    console.log("👉 Nodemailer response:", details.response);
     return true; // ✅ success
   } catch (error) {
-    console.log("❌ Email error:", error.message);
+    console.log("❌ FULL EMAIL ERROR:", error);
     return false; // ❌ fail
   }
 }
