@@ -31,7 +31,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/chats", chatRouter);
 
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
 
 app.use(errorMiddleware);
