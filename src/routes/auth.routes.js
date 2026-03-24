@@ -53,7 +53,7 @@ authRouter.get("/get-me", IdentifyUser, getMeController);
 authRouter.put(
   "/update-profile",
   upload.single("profile"),
-  IdentifyUser,
+  IdentifyUser, 
   updateProfileController,
 );
 

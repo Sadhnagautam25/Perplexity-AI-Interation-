@@ -13,9 +13,14 @@ const transpoter = nodemailer.createTransport({
   },
 });
 
-transpoter.verify().catch((error) => {
-  console.log("Error connecting to email server:", error);
+transpoter.verify((error, success) => {
+  if (error) {
+    console.log("SMTP ERROR FULL:", error);
+  } else {
+    console.log("SMTP WORKING");
+  }
 });
+
 
 export async function sendEmail({ to, subject, html, text }) {
   try {
