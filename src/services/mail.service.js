@@ -1,45 +1,30 @@
 import dotenv from "dotenv";
 dotenv.config();
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-const transpoter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465, // Change from 587 to 465
-  secure: true, // Change from false to true
-  auth: {
-    type: "OAuth2",
-    user: process.env.GOOGLE_USER,
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
-  },
-});
-
-transpoter.verify((error, success) => {
-  if (error) {
-    console.log("SMTP ERROR FULL:", error);
-  } else {
-    console.log("SMTP WORKING");
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendEmail({ to, subject, html, text }) {
   try {
-    console.log("👉 sendEmail called for:", to);
-    const mailOption = {
-      from: process.env.GOOGLE_USER,
-      to,
-      subject,
-      html,
-      text,
-    };
+    console.log("👉 Resend email called for:", to);
 
-    const details = await transpoter.sendMail(mailOption);
+    const { data, error } = await resend.emails.send({
+      from: "onboarding@resend.dev", // default testing domain
+      to: [to],
+      subject: subject,
+      html: html,
+      text: text,
+    });
 
-    console.log("👉 Nodemailer response:", details.response);
-    return true; // ✅ success
+    if (error) {
+      console.log("❌ Resend error:", error);
+      return false;
+    }
+
+    console.log("✅ Email sent via Resend:", data);
+    return true;
   } catch (error) {
     console.log("❌ FULL EMAIL ERROR:", error);
-    return false; // ❌ fail
+    return false;
   }
 }
